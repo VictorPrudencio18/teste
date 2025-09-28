@@ -1,0 +1,6 @@
+{
+  "name": "ConcursoGenius: Plano de Estudos Inteligente",
+  "description": "Um sistema para analisar editais de concursos, obter informações do usuário e gerar planos de estudo personalizados, resumos, questões e flashcards usando IA.",
+  "requestFramePermissions": [],
+  "prompt": ""
+}
