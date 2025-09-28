@@ -14,54 +14,67 @@ import { PlanViewStep } from './components/steps/PlanViewStep';
 import { TopicStudyStep } from './components/steps/TopicStudyStep';
 import { AICoachStep } from './components/steps/AICoachStep';
 import { DashboardStep } from './components/steps/DashboardStep';
+import { QuestionSystemStep } from './components/steps/QuestionSystemStep';
+import { DataManagementStep } from './components/steps/DataManagementStep';
 import { LoadingSpinner } from './components/common/LoadingSpinner';
 import { Button } from './components/common/Button';
 import { analyzeEditalWithAI, generateTopicContentWithAI, extractRolesFromEditalAI, getAIStudySuggestions, askAICoachQuestion, getDeeperUnderstandingAI } from './services/geminiService';
-import { AcademicCapIcon, SparklesIcon, ChatBubbleLeftEllipsisIcon, HomeIcon, ChartPieIcon } from './constants'; // Removed ArrowRightOnRectangleIcon
+import { AcademicCapIcon, SparklesIcon, ChatBubbleLeftEllipsisIcon, HomeIcon, ChartPieIcon, QuestionMarkCircleIcon, CircleStackIcon } from './constants'; // Removed ArrowRightOnRectangleIcon
 import { v4 as uuidv4 } from 'uuid';
+import { useAppStorage } from './hooks/useAppStorage';
+import { localStorageService, AppState } from './services/localStorageService';
 
 const LOCALSTORAGE_KEY = 'concursoGeniusAppState_v1';
 
 const App: React.FC = () => {
-  // --- STATE INITIALIZATION FROM LOCALSTORAGE ---
-  const loadInitialState = () => {
-    try {
-      const savedStateJSON = localStorage.getItem(LOCALSTORAGE_KEY);
-      if (savedStateJSON) {
-        return JSON.parse(savedStateJSON);
-      }
-    } catch (error) {
-      console.error("Failed to load state from localStorage:", error);
-      localStorage.removeItem(LOCALSTORAGE_KEY); // Clear corrupted state
-    }
-    return {}; // Return empty object if nothing saved or on error
-  };
+  // --- INITIALIZE NEW STORAGE SYSTEM ---
+  const { 
+    state: savedState, 
+    loading: storageLoading, 
+    saveState, 
+    loadState,
+    updateState
+  } = useAppStorage();
 
-  const [initialState] = useState(loadInitialState);
-
-  // State Hooks
-  const [currentPhase, setCurrentPhase] = useState<AppPhase>(initialState.currentPhase || AppPhase.UPLOAD_PDF_ONLY);
-  const [editalText, setEditalText] = useState<string>(initialState.editalText || '');
-  const [editalFileName, setEditalFileName] = useState<string | null>(initialState.editalFileName || null);
+  // State Hooks - Initialize from new storage system
+  const [currentPhase, setCurrentPhase] = useState<AppPhase>(
+    savedState?.currentPhase || AppPhase.UPLOAD_PDF_ONLY
+  );
+  const [editalText, setEditalText] = useState<string>(savedState?.editalText || '');
+  const [editalFileName, setEditalFileName] = useState<string | null>(savedState?.editalFileName || null);
   
-  const [userProfile, setUserProfile] = useState<UserProfile | null>(initialState.userProfile || {
-    targetRole: '', 
-    dailyStudyHours: 3, 
-    studyDays: ['Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta'], 
-    studyNotes: '' 
-  });
-  const [extractedRoles, setExtractedRoles] = useState<string[]>(initialState.extractedRoles || []);
-  const [aiRoleClarificationQuestions, setAiRoleClarificationQuestions] = useState<string[] | undefined>(initialState.aiRoleClarificationQuestions || undefined);
-  const [aiRoleExtractionError, setAiRoleExtractionError] = useState<string | null>(initialState.aiRoleExtractionError || null);
+  const [userProfile, setUserProfile] = useState<UserProfile | null>(
+    savedState?.userProfile || {
+      targetRole: '', 
+      dailyStudyHours: 3, 
+      studyDays: ['Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta'], 
+      studyNotes: '' 
+    }
+  );
+  const [extractedRoles, setExtractedRoles] = useState<string[]>(savedState?.extractedRoles || []);
+  const [aiRoleClarificationQuestions, setAiRoleClarificationQuestions] = useState<string[] | undefined>(
+    savedState?.aiRoleClarificationQuestions || undefined
+  );
+  const [aiRoleExtractionError, setAiRoleExtractionError] = useState<string | null>(
+    savedState?.aiRoleExtractionError || null
+  );
   const [isLoadingRoles, setIsLoadingRoles] = useState(false);
 
-  const [analysisResult, setAnalysisResult] = useState<EditalAnalysisData | null>(initialState.analysisResult || null);
+  const [analysisResult, setAnalysisResult] = useState<EditalAnalysisData | null>(
+    savedState?.analysisResult || null
+  );
 
-  const [currentStudyingSubjectId, setCurrentStudyingSubjectId] = useState<string | null>(initialState.currentStudyingSubjectId || null);
-  const [currentStudyingTopicId, setCurrentStudyingTopicId] = useState<string | null>(initialState.currentStudyingTopicId || null);
+  const [currentStudyingSubjectId, setCurrentStudyingSubjectId] = useState<string | null>(
+    savedState?.currentStudyingSubjectId || null
+  );
+  const [currentStudyingTopicId, setCurrentStudyingTopicId] = useState<string | null>(
+    savedState?.currentStudyingTopicId || null
+  );
   const [globalLoadingMessage, setGlobalLoadingMessage] = useState<string | null>(null);
 
-  const [aiCoachChatMessages, setAiCoachChatMessages] = useState<ChatMessage[]>(initialState.aiCoachChatMessages || []);
+  const [aiCoachChatMessages, setAiCoachChatMessages] = useState<ChatMessage[]>(
+    savedState?.aiCoachChatMessages || []
+  );
   const [aiCoachSuggestions, setAiCoachSuggestions] = useState<AISuggestion[] | null>(null);
   const [aiCoachGeneralAdvice, setAiCoachGeneralAdvice] = useState<string | null>(null);
   const [isLoadingAICoachSuggestions, setIsLoadingAICoachSuggestions] = useState(false);
@@ -69,37 +82,38 @@ const App: React.FC = () => {
   const [aiCoachSuggestionsError, setAiCoachSuggestionsError] = useState<string | null>(null);
   const [aiCoachChatError, setAiCoachChatError] = useState<string | null>(null);
 
-  const [dashboardData, setDashboardData] = useState<DashboardData | null>(initialState.dashboardData || null);
+  const [dashboardData, setDashboardData] = useState<DashboardData | null>(savedState?.dashboardData || null);
   const [isProcessingSubmit, setIsProcessingSubmit] = useState(false); 
   
-  // --- EFFECT TO SAVE STATE TO LOCALSTORAGE ---
-  useEffect(() => {
-    try {
-      const stateToSave = {
-        currentPhase,
-        editalText,
-        editalFileName,
-        userProfile,
-        extractedRoles,
-        aiRoleClarificationQuestions,
-        aiRoleExtractionError,
-        analysisResult,
-        currentStudyingSubjectId,
-        currentStudyingTopicId,
-        aiCoachChatMessages,
-        dashboardData,
-        // Transient states like isLoading*, *Error, globalLoadingMessage are not saved
-      };
-      const serializedState = JSON.stringify(stateToSave);
-      localStorage.setItem(LOCALSTORAGE_KEY, serializedState);
-    } catch (error) {
-      console.error("Failed to save state to localStorage:", error);
-    }
+  // --- AUTO-SAVE CURRENT STATE ---
+  const getCurrentAppState = useCallback((): AppState => {
+    return {
+      currentPhase,
+      editalText,
+      editalFileName,
+      userProfile,
+      extractedRoles,
+      aiRoleClarificationQuestions,
+      aiRoleExtractionError,
+      analysisResult,
+      currentStudyingSubjectId,
+      currentStudyingTopicId,
+      aiCoachChatMessages,
+      dashboardData,
+    };
   }, [
     currentPhase, editalText, editalFileName, userProfile, extractedRoles, 
     aiRoleClarificationQuestions, aiRoleExtractionError, analysisResult,
     currentStudyingSubjectId, currentStudyingTopicId, aiCoachChatMessages, dashboardData
   ]);
+
+  // Auto-save when state changes
+  useEffect(() => {
+    if (!storageLoading) {
+      const currentState = getCurrentAppState();
+      saveState(currentState);
+    }
+  }, [getCurrentAppState, saveState, storageLoading]);
 
   // useCallback Hooks
   const calculateDashboardData = useCallback(() => {
@@ -346,12 +360,29 @@ const App: React.FC = () => {
 
   const handleResetApp = () => { 
     setGlobalLoadingMessage("Limpando dados...");
-    localStorage.removeItem(LOCALSTORAGE_KEY);
+    // Use novo sistema de storage
+    localStorageService.clearAllData();
     resetLocalAppState();
     // Simulating a small delay for the message to be visible
     setTimeout(() => {
       setGlobalLoadingMessage(null);
     }, 500);
+  };
+
+  // Handler para restaurar estado do gerenciador de dados
+  const handleStateRestored = (restoredState: AppState) => {
+    if (restoredState.currentPhase) setCurrentPhase(restoredState.currentPhase);
+    if (restoredState.editalText) setEditalText(restoredState.editalText);
+    if (restoredState.editalFileName !== undefined) setEditalFileName(restoredState.editalFileName);
+    if (restoredState.userProfile) setUserProfile(restoredState.userProfile);
+    if (restoredState.extractedRoles) setExtractedRoles(restoredState.extractedRoles);
+    if (restoredState.aiRoleClarificationQuestions) setAiRoleClarificationQuestions(restoredState.aiRoleClarificationQuestions);
+    if (restoredState.aiRoleExtractionError !== undefined) setAiRoleExtractionError(restoredState.aiRoleExtractionError);
+    if (restoredState.analysisResult) setAnalysisResult(restoredState.analysisResult);
+    if (restoredState.currentStudyingSubjectId !== undefined) setCurrentStudyingSubjectId(restoredState.currentStudyingSubjectId);
+    if (restoredState.currentStudyingTopicId !== undefined) setCurrentStudyingTopicId(restoredState.currentStudyingTopicId);
+    if (restoredState.aiCoachChatMessages) setAiCoachChatMessages(restoredState.aiCoachChatMessages);
+    if (restoredState.dashboardData) setDashboardData(restoredState.dashboardData);
   };
 
   const handleRoleSelectedAndProceed = (selectedRole: string) => {
@@ -433,11 +464,13 @@ const App: React.FC = () => {
   
   const handleNavigateToDashboard = () => setCurrentPhase(AppPhase.DASHBOARD);
   const handleNavigateToPlanView = () => setCurrentPhase(AppPhase.VIEW_PLAN);
+  const handleNavigateToQuestionSystem = () => setCurrentPhase(AppPhase.QUESTION_SYSTEM);
+  const handleNavigateToDataManagement = () => setCurrentPhase(AppPhase.DATA_MANAGEMENT);
 
   // useEffect Hooks
   useEffect(() => {
     // This effect ensures that when the app loads, if there's a plan, it calculates dashboard data.
-    if ((currentPhase === AppPhase.DASHBOARD || currentPhase === AppPhase.VIEW_PLAN || currentPhase === AppPhase.STUDY_TOPIC) && analysisResult) {
+    if ((currentPhase === AppPhase.DASHBOARD || currentPhase === AppPhase.VIEW_PLAN || currentPhase === AppPhase.STUDY_TOPIC || currentPhase === AppPhase.QUESTION_SYSTEM || currentPhase === AppPhase.DATA_MANAGEMENT) && analysisResult) {
       calculateDashboardData();
     }
   }, [currentPhase, analysisResult, calculateDashboardData]);
@@ -556,6 +589,17 @@ const App: React.FC = () => {
                   onRefreshSuggestions={fetchAICoachSuggestions} onSendMessage={handleSendAICoachMessage}
                   onNavigateToTopic={handleNavigateToStudyTopicFromCoach} onBackToPlan={handleBackToPlan}
                 />;
+      case AppPhase.QUESTION_SYSTEM:
+        return <QuestionSystemStep 
+                  onBack={handleBackToPlan}
+                  onNext={() => setCurrentPhase(AppPhase.DASHBOARD)}
+                />;
+      case AppPhase.DATA_MANAGEMENT:
+        return <DataManagementStep 
+                  onBack={handleNavigateToDashboard}
+                  onStateRestored={handleStateRestored}
+                  currentState={getCurrentAppState()}
+                />;
       // Removed LOGIN and REGISTER cases
       default: 
         setCurrentPhase(AppPhase.UPLOAD_PDF_ONLY); return <LoadingSpinner size="lg" />;
@@ -563,36 +607,78 @@ const App: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen bg-slate-50 flex flex-col">
-      <header className="bg-white shadow-md sticky top-0 z-50">
-        <div className="max-w-7xl mx-auto py-4 px-4 sm:px-6 lg:px-8 flex items-center justify-between">
-          <div className="flex items-center cursor-pointer" onClick={() => {
+    <div className="min-h-screen flex flex-col bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50">
+      {/* Global Loading Overlay */}
+      {globalLoadingMessage && (currentPhase === AppPhase.GENERATING_PLAN || globalLoadingMessage.includes("Limpando")) && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-lg flex items-center justify-center z-50">
+          <div className="bg-white/95 backdrop-blur-sm rounded-2xl p-10 shadow-2xl flex flex-col items-center space-y-6 max-w-md mx-4 border border-white/20">
+            <div className="relative">
+              <LoadingSpinner size="lg" />
+              <div className="absolute inset-0 animate-ping rounded-full bg-sky-400/20"></div>
+            </div>
+            <div className="text-center">
+              <h3 className="text-xl font-bold text-slate-900 mb-2">
+                {globalLoadingMessage || 'Processando...'}
+              </h3>
+              <p className="text-sm text-slate-600 leading-relaxed">
+                Nossa IA está trabalhando para criar a melhor experiência de estudos para você.
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+      
+      {/* Modern Header */}
+      <header className="relative bg-white/70 backdrop-blur-xl border-b border-white/20 sticky top-0 z-40 shadow-sm">
+        <div className="absolute inset-0 bg-gradient-to-r from-sky-600/5 via-indigo-600/5 to-purple-600/5"></div>
+        <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center space-x-4 cursor-pointer" onClick={() => {
                 if (analysisResult && analysisResult.subjects.length > 0) handleNavigateToDashboard();
                 else if (editalText) setCurrentPhase(AppPhase.ROLE_SELECTION);
                 else setCurrentPhase(AppPhase.UPLOAD_PDF_ONLY);
-            }}
-            role="button" tabIndex={0} aria-label="Ir para o Início / Dashboard"
-          >
-            <AcademicCapIcon className="w-10 h-10 text-sky-600 mr-3"/>
-            <h1 className="text-3xl font-bold text-sky-700 tracking-tight" style={{ fontFamily: "'Poppins', sans-serif" }}>
-              ConcursoGenius
-            </h1>
-          </div>
-          <div className="flex items-center space-x-2 sm:space-x-4">
-             {/* Simplified Header Buttons - No Logout */}
+              }}
+              role="button" tabIndex={0} aria-label="Ir para o Início / Dashboard"
+            >
+              <div className="relative">
+                <div className="w-12 h-12 bg-gradient-to-br from-sky-500 via-blue-600 to-indigo-700 rounded-2xl flex items-center justify-center shadow-lg transform hover:scale-105 transition-transform duration-200">
+                  <AcademicCapIcon className="w-7 h-7 text-white" />
+                </div>
+                <div className="absolute -top-1 -right-1 w-4 h-4 bg-gradient-to-br from-amber-400 to-orange-500 rounded-full animate-pulse"></div>
+              </div>
+              <div>
+                <h1 className="text-2xl font-bold bg-gradient-to-r from-slate-900 via-sky-800 to-indigo-900 bg-clip-text text-transparent">
+                  ConcursoGenius
+                </h1>
+                <p className="text-sm text-slate-600 font-medium flex items-center gap-1">
+                  <SparklesIcon className="w-3 h-3 text-amber-500" />
+                  Plano de Estudos Inteligente
+                </p>
+              </div>
+            </div>
+            
+            <nav className="hidden md:flex items-center space-x-2">
               <Button
                   variant="ghost" size="md" onClick={handleNavigateToDashboard}
                   leftIcon={<HomeIcon className="w-5 h-5"/>}
-                  className={`font-semibold ${currentPhase === AppPhase.DASHBOARD ? 'text-sky-600 bg-sky-100' : 'text-slate-600 hover:text-sky-700 hover:bg-sky-50'}`}
+                  className={`font-semibold rounded-xl px-4 py-2 transition-all duration-200 ${
+                    currentPhase === AppPhase.DASHBOARD 
+                      ? 'text-emerald-700 bg-gradient-to-r from-emerald-100 to-teal-100 shadow-sm border border-emerald-200' 
+                      : 'text-slate-600 hover:text-emerald-700 hover:bg-gradient-to-r hover:from-emerald-50 hover:to-teal-50'
+                  }`}
                   disabled={!(analysisResult && analysisResult.subjects.length > 0)}
                   aria-current={currentPhase === AppPhase.DASHBOARD ? "page" : undefined}
               >
                   <span className="hidden sm:inline">Dashboard</span>
               </Button>
-               <Button
+              <Button
                   variant="ghost" size="md" onClick={handleNavigateToPlanView}
                   leftIcon={<ChartPieIcon className="w-5 h-5"/>}
-                  className={`font-semibold ${currentPhase === AppPhase.VIEW_PLAN || currentPhase === AppPhase.STUDY_TOPIC ? 'text-sky-600 bg-sky-100' : 'text-slate-600 hover:text-sky-700 hover:bg-sky-50'}`}
+                  className={`font-semibold rounded-xl px-4 py-2 transition-all duration-200 ${
+                    currentPhase === AppPhase.VIEW_PLAN || currentPhase === AppPhase.STUDY_TOPIC 
+                      ? 'text-sky-700 bg-gradient-to-r from-sky-100 to-blue-100 shadow-sm border border-sky-200' 
+                      : 'text-slate-600 hover:text-sky-700 hover:bg-gradient-to-r hover:from-sky-50 hover:to-blue-50'
+                  }`}
                   disabled={!(analysisResult && analysisResult.subjects.length > 0)}
                   aria-current={currentPhase === AppPhase.VIEW_PLAN || currentPhase === AppPhase.STUDY_TOPIC ? "page" : undefined}
               >
@@ -601,35 +687,120 @@ const App: React.FC = () => {
               <Button
                   variant="ghost" size="md" onClick={handleNavigateToAICoach}
                   leftIcon={<ChatBubbleLeftEllipsisIcon className="w-5 h-5"/>}
-                  className={`font-semibold ${currentPhase === AppPhase.AI_COACH ? 'text-sky-600 bg-sky-100' : 'text-slate-600 hover:text-sky-700 hover:bg-sky-50'}`}
+                  className={`font-semibold rounded-xl px-4 py-2 transition-all duration-200 ${
+                    currentPhase === AppPhase.AI_COACH 
+                      ? 'text-purple-700 bg-gradient-to-r from-purple-100 to-indigo-100 shadow-sm border border-purple-200' 
+                      : 'text-slate-600 hover:text-purple-700 hover:bg-gradient-to-r hover:from-purple-50 hover:to-indigo-50'
+                  }`}
                   aria-current={currentPhase === AppPhase.AI_COACH ? "page" : undefined}
               >
                   <span className="hidden sm:inline">Coach IA</span>
               </Button>
+              <Button
+                  variant="ghost" size="md" onClick={handleNavigateToQuestionSystem}
+                  leftIcon={<QuestionMarkCircleIcon className="w-5 h-5"/>}
+                  className={`font-semibold rounded-xl px-4 py-2 transition-all duration-200 ${
+                    currentPhase === AppPhase.QUESTION_SYSTEM 
+                      ? 'text-orange-700 bg-gradient-to-r from-orange-100 to-amber-100 shadow-sm border border-orange-200' 
+                      : 'text-slate-600 hover:text-orange-700 hover:bg-gradient-to-r hover:from-orange-50 hover:to-amber-50'
+                  }`}
+                  aria-current={currentPhase === AppPhase.QUESTION_SYSTEM ? "page" : undefined}
+              >
+                  <span className="hidden sm:inline">Questões</span>
+              </Button>
+            </nav>
           </div>
         </div>
       </header>
       
+      {/* Enhanced Main Content */}
       <main className="flex-grow w-full max-w-7xl mx-auto py-8 px-4 sm:px-6 lg:px-8">
-        {renderAppContent()}
+        <div className="relative">
+          {/* Decorative background elements */}
+          <div className="absolute inset-0 overflow-hidden pointer-events-none">
+            <div className="absolute top-0 left-1/4 w-72 h-72 bg-gradient-to-br from-sky-300/10 to-blue-400/10 rounded-full blur-3xl"></div>
+            <div className="absolute top-1/3 right-1/4 w-64 h-64 bg-gradient-to-br from-indigo-300/10 to-purple-400/10 rounded-full blur-3xl"></div>
+            <div className="absolute bottom-1/4 left-1/3 w-80 h-80 bg-gradient-to-br from-emerald-300/10 to-teal-400/10 rounded-full blur-3xl"></div>
+          </div>
+          
+          <div className="relative z-10">
+            {renderAppContent()}
+          </div>
+        </div>
       </main>
 
-      <footer className="bg-slate-800 text-slate-300 py-8">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
-          <p className="text-sm">
-            &copy; {new Date().getFullYear()} ConcursoGenius. Todos os direitos reservados.
-          </p>
-          <p className="text-xs mt-1">
-            Potencializado com <SparklesIcon className="inline w-3 h-3 text-amber-400" /> Inteligência Artificial para otimizar seus estudos.
-          </p>
-          <div className="mt-4">
-            <Button 
-              variant="link" size="sm" onClick={handleResetApp}
-              className="text-slate-400 hover:text-sky-400"
-              isLoading={globalLoadingMessage?.includes("Limpando")}
-            > 
-              {globalLoadingMessage?.includes("Limpando") ? "Limpando..." : 'Limpar Dados e Reiniciar'}
-            </Button>
+      {/* Modern Footer */}
+      <footer className="relative bg-gradient-to-br from-slate-900 via-slate-800 to-indigo-900 text-slate-300 py-12">
+        <div className="absolute inset-0 opacity-20 bg-repeat" style={{
+          backgroundImage: "url('data:image/svg+xml,%3Csvg width=\"60\" height=\"60\" viewBox=\"0 0 60 60\" xmlns=\"http://www.w3.org/2000/svg\"%3E%3Cg fill=\"none\" fill-rule=\"evenodd\"%3E%3Cg fill=\"%23ffffff\" fill-opacity=\"0.03\"%3E%3Cpath d=\"M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z\"/%3E%3C/g%3E%3C/g%3E%3C/svg%3E')"
+        }}></div>
+        <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-8 mb-8">
+            <div className="text-center md:text-left">
+              <div className="flex items-center justify-center md:justify-start space-x-3 mb-4">
+                <div className="w-10 h-10 bg-gradient-to-br from-sky-500 to-indigo-600 rounded-xl flex items-center justify-center">
+                  <AcademicCapIcon className="w-6 h-6 text-white" />
+                </div>
+                <h3 className="text-xl font-bold text-white">ConcursoGenius</h3>
+              </div>
+              <p className="text-slate-400 text-sm leading-relaxed">
+                Revolucionando a forma como você estuda para concursos com inteligência artificial avançada.
+              </p>
+            </div>
+            
+            <div className="text-center">
+              <h4 className="text-white font-semibold mb-4">Recursos</h4>
+              <ul className="space-y-2 text-sm text-slate-400">
+                <li className="hover:text-sky-400 transition-colors cursor-pointer">• Análise de Editais</li>
+                <li className="hover:text-sky-400 transition-colors cursor-pointer">• Planos Personalizados</li>
+                <li className="hover:text-sky-400 transition-colors cursor-pointer">• Coach IA</li>
+                <li className="hover:text-sky-400 transition-colors cursor-pointer">• Dashboard Inteligente</li>
+              </ul>
+            </div>
+            
+            <div className="text-center md:text-right">
+              <h4 className="text-white font-semibold mb-4">Tecnologia</h4>
+              <div className="flex flex-wrap justify-center md:justify-end gap-2">
+                <span className="px-3 py-1 bg-sky-600/20 text-sky-300 rounded-full text-xs font-medium border border-sky-500/20">
+                  IA Gemini
+                </span>
+                <span className="px-3 py-1 bg-indigo-600/20 text-indigo-300 rounded-full text-xs font-medium border border-indigo-500/20">
+                  React + TypeScript
+                </span>
+                <span className="px-3 py-1 bg-purple-600/20 text-purple-300 rounded-full text-xs font-medium border border-purple-500/20">
+                  Machine Learning
+                </span>
+              </div>
+            </div>
+          </div>
+          
+          <div className="border-t border-slate-700 pt-8">
+            <div className="flex flex-col md:flex-row items-center justify-between space-y-4 md:space-y-0">
+              <p className="text-sm text-slate-400">
+                &copy; {new Date().getFullYear()} ConcursoGenius. Todos os direitos reservados.
+              </p>
+              <div className="flex items-center space-x-6">
+                <p className="text-xs text-slate-500 flex items-center gap-2">
+                  Potencializado por <SparklesIcon className="w-4 h-4 text-amber-400 animate-pulse" /> 
+                  <span className="font-medium text-amber-400">Inteligência Artificial</span>
+                </p>
+                <div className="h-4 w-px bg-slate-600"></div>
+                <Button 
+                  variant="link" size="sm" onClick={handleNavigateToDataManagement}
+                  className="text-slate-400 hover:text-blue-400 transition-colors duration-200 font-medium"
+                > 
+                  💾 Gerenciar Dados
+                </Button>
+                <div className="h-4 w-px bg-slate-600"></div>
+                <Button 
+                  variant="link" size="sm" onClick={handleResetApp}
+                  className="text-slate-400 hover:text-red-400 transition-colors duration-200 font-medium"
+                  isLoading={globalLoadingMessage?.includes("Limpando")}
+                > 
+                  {globalLoadingMessage?.includes("Limpando") ? "Limpando..." : 'Resetar Sistema'}
+                </Button>
+              </div>
+            </div>
           </div>
         </div>
       </footer>

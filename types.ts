@@ -17,6 +17,9 @@ export interface Question {
   options: string[];
   correctAnswerIndex: number;
   explanation?: string;
+  difficulty?: 'easy' | 'medium' | 'hard';
+  topic?: string;
+  category?: string;
   // User interaction state will be stored in AnalyzedTopic.userInteractions
   // New fields for enhanced tracking:
   attempts?: number; // Number of times the user tried to answer
@@ -108,7 +111,9 @@ export enum AppPhase {
   VIEW_PLAN = 'VIEW_PLAN',
   STUDY_TOPIC = 'STUDY_TOPIC',
   AI_COACH = 'AI_COACH',
-  DASHBOARD = 'DASHBOARD', 
+  DASHBOARD = 'DASHBOARD',
+  QUESTION_SYSTEM = 'QUESTION_SYSTEM',
+  DATA_MANAGEMENT = 'DATA_MANAGEMENT', 
 }
 
 export enum ContentType {
@@ -134,6 +139,73 @@ export interface AISuggestion {
   subjectName: string;
   topicName: string;
   reason: string; 
+}
+
+// Sistema de Questões e Memória
+export interface QuestionAttempt {
+  questionId: string;
+  isCorrect: boolean;
+  selectedAnswerIndex: number;
+  timeSpent: number; // em segundos
+  timestamp: number;
+  hintsUsed: number;
+}
+
+export interface QuestionMemory {
+  questionId: string;
+  totalAttempts: number;
+  correctAttempts: number;
+  incorrectAttempts: number;
+  averageTimeSpent: number;
+  lastAttemptTimestamp: number;
+  consecutiveCorrect: number;
+  consecutiveIncorrect: number;
+  difficultyRating: 'easy' | 'medium' | 'hard';
+  masteryLevel: 'learning' | 'practicing' | 'mastered';
+  topicId?: string;
+  category?: string;
+  attempts: QuestionAttempt[];
+}
+
+export interface QuizSession {
+  id: string;
+  userId?: string;
+  startTimestamp: number;
+  endTimestamp?: number;
+  questions: Question[];
+  attempts: QuestionAttempt[];
+  score: number;
+  totalQuestions: number;
+  correctAnswers: number;
+  timeSpent: number; // em segundos
+  category?: string;
+  topicId?: string;
+  difficulty?: 'easy' | 'medium' | 'hard';
+  isCompleted: boolean;
+}
+
+export interface UserQuestionProfile {
+  userId?: string;
+  questionsMemory: { [questionId: string]: QuestionMemory };
+  totalQuestionsAnswered: number;
+  totalCorrectAnswers: number;
+  averageScore: number;
+  strongCategories: string[];
+  weakCategories: string[];
+  preferredDifficulty: 'easy' | 'medium' | 'hard';
+  totalStudyTime: number; // em segundos
+  quizSessions: QuizSession[];
+  lastActivityTimestamp: number;
+  streakDays: number;
+  longestStreak: number;
+  achievements: string[];
+}
+
+export interface QuestionRecommendation {
+  questionId: string;
+  reason: 'weak_category' | 'spaced_repetition' | 'difficulty_progression' | 'new_topic';
+  priority: number; // 1-10
+  estimatedDifficulty: 'easy' | 'medium' | 'hard';
 }
 
 // For Dashboard

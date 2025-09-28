@@ -1,26 +1,29 @@
 {
-  "name": "concursogenius:-plano-de-estudos-inteligente",
+  "name": "concursogenius-plano-de-estudos-inteligente",
   "private": true,
   "version": "0.0.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
     "build": "vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "setup-gemini": "./setup-gemini.sh",
+    "help": "echo '🚀 ConcursoGenius - Comandos disponíveis:' && echo '  npm run setup-gemini  - Configurar API do Gemini' && echo '  npm run dev          - Iniciar servidor de desenvolvimento' && echo '  npm run build        - Compilar para produção'"
   },
   "dependencies": {
+    "@google/genai": "^1.0.1",
+    "firebase": "^11.8.1",
+    "marked": "^15.0.12",
+    "pdfjs-dist": "4.4.168",
     "react": "^19.1.0",
     "react-dom": "^19.1.0",
-    "@google/genai": "^1.0.1",
-    "uuid": "^11.1.0",
-    "pdfjs-dist": "4.4.168",
-    "firebase": "^11.8.1",
-    "marked": "^15.0.12"
+    "uuid": "^11.1.0"
   },
   "devDependencies": {
     "@types/node": "^22.14.0",
     "@vitejs/plugin-react": "^5.0.0",
     "typescript": "~5.8.2",
-    "vite": "^6.2.0"
+    "vite": "^6.2.0",
+    "vitest": "^3.2.4"
   }
 }

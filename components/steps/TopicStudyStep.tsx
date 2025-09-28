@@ -3,6 +3,7 @@ import { AnalyzedTopic, Question, Flashcard, ContentType, DiscursiveQuestion, To
 import { Button } from '../common/Button';
 import { Card } from '../common/Card';
 import { LoadingSpinner } from '../common/LoadingSpinner';
+import { EnhancedSummary } from '../common/EnhancedSummary';
 import { ArrowLeftIcon, ArrowRightIcon, CheckCircleIcon, XCircleIcon, SparklesIcon, DocumentTextIcon, QuestionMarkCircleIcon, RectangleStackIcon, PencilIcon, ChevronDownIcon, LightBulbIcon, BrainIcon, RefreshIcon } from '../../constants'; 
 import { marked } from 'marked'; // For rendering markdown from deeper understanding
 
@@ -143,16 +144,11 @@ export const TopicStudyStep: React.FC<TopicStudyStepProps> = ({
     switch (activeTab) {
       case ContentType.SUMMARY:
         return currentTopicContent?.summary ? (
-          <div 
-            className="prose prose-lg prose-slate max-w-none p-1 text-slate-700 leading-relaxed 
-                       prose-headings:font-display prose-headings:text-slate-800 
-                       prose-strong:text-slate-900 prose-a:text-sky-600 hover:prose-a:text-sky-700
-                       prose-table:border prose-table:border-collapse prose-table:border-slate-300
-                       prose-th:border prose-th:border-slate-300 prose-th:p-2 prose-th:bg-slate-100 prose-th:font-semibold
-                       prose-td:border prose-td:border-slate-300 prose-td:p-2
-                       prose-blockquote:border-l-4 prose-blockquote:px-4 prose-blockquote:py-2 prose-blockquote:my-4 prose-blockquote:rounded-r-md prose-blockquote:font-normal prose-blockquote:not-italic
-                       "
-            dangerouslySetInnerHTML={{ __html: marked.parse(currentTopicContent.summary) }} 
+          <EnhancedSummary 
+            summaryContent={currentTopicContent.summary}
+            topicName={topic.name}
+            onRegenerateSummary={() => onGenerateContent(topic.id, ContentType.SUMMARY)}
+            isLoading={topic.isLoadingContent}
           />
         ) : <Button onClick={() => onGenerateContent(topic.id, ContentType.SUMMARY)} isLoading={topic.isLoadingContent} leftIcon={<SparklesIcon className="w-5 h-5"/>} size="lg" fullWidth>Gerar Resumo Inteligente</Button>;
       
