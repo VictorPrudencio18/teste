@@ -8,10 +8,12 @@
     "build": "vite build",
     "preview": "vite preview",
     "setup-gemini": "./setup-gemini.sh",
-    "help": "echo '🚀 ConcursoGenius - Comandos disponíveis:' && echo '  npm run setup-gemini  - Configurar API do Gemini' && echo '  npm run dev          - Iniciar servidor de desenvolvimento' && echo '  npm run build        - Compilar para produção'"
+    "setup-supabase": "./setup-supabase.sh",
+    "help": "echo '🚀 ConcursoGenius - Comandos disponíveis:' && echo '  npm run setup-gemini    - Configurar API do Gemini' && echo '  npm run setup-supabase  - Configurar Supabase (Auth)' && echo '  npm run dev            - Iniciar servidor de desenvolvimento' && echo '  npm run build          - Compilar para produção'"
   },
   "dependencies": {
     "@google/genai": "^1.0.1",
+    "@supabase/supabase-js": "^2.46.2",
     "firebase": "^11.8.1",
     "marked": "^15.0.12",
     "pdfjs-dist": "4.4.168",

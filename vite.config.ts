@@ -1,6 +1,8 @@
-import path from 'path';
+/// <reference types="node" />
 import { defineConfig, loadEnv } from 'vite';
+// @ts-ignore
 import react from '@vitejs/plugin-react';
+import { resolve } from 'node:path';
 
 export default defineConfig(({ mode }) => {
     const env = loadEnv(mode, '.', '');
@@ -20,7 +22,7 @@ export default defineConfig(({ mode }) => {
       },
       resolve: {
         alias: {
-          '@': path.resolve(__dirname, '.'),
+          '@': resolve(import.meta.dirname || __dirname, '.'),
         }
       }
     };

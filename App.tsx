@@ -23,6 +23,19 @@ import { AcademicCapIcon, SparklesIcon, ChatBubbleLeftEllipsisIcon, HomeIcon, Ch
 import { v4 as uuidv4 } from 'uuid';
 import { useAppStorage } from './hooks/useAppStorage';
 import { localStorageService, AppState } from './services/localStorageService';
+import { AuthModal } from './components/auth/AuthModal';
+import { 
+  signInWithEmailPassword, 
+  signUpWithEmailPassword, 
+  signInWithGoogle,
+  resetPassword,
+  signOutUser, 
+  getCurrentUser, 
+  onAuthStateChange, 
+  AuthUser 
+} from './services/authService';
+import { supabase } from './services/supabaseClient';
+import { saveUserStateToCloud, loadUserStateFromCloud } from './services/cloudSyncService';
 
 const LOCALSTORAGE_KEY = 'concursoGeniusAppState_v1';
 
@@ -37,6 +50,11 @@ const App: React.FC = () => {
   } = useAppStorage();
 
   // State Hooks - Initialize from new storage system
+  const [authUser, setAuthUser] = useState<AuthUser | null>(null);
+  const [authLoading, setAuthLoading] = useState(false);
+  const [authError, setAuthError] = useState<string | null>(null);
+  const [authOpen, setAuthOpen] = useState(false);
+  const authEnabled = !!supabase;
   const [currentPhase, setCurrentPhase] = useState<AppPhase>(
     savedState?.currentPhase || AppPhase.UPLOAD_PDF_ONLY
   );
@@ -114,6 +132,17 @@ const App: React.FC = () => {
       saveState(currentState);
     }
   }, [getCurrentAppState, saveState, storageLoading]);
+
+  // Listen to auth changes
+  useEffect(() => {
+    if (!authEnabled) return;
+    (async () => {
+      const u = await getCurrentUser();
+      setAuthUser(u);
+    })();
+    const sub = onAuthStateChange((_, user) => setAuthUser(user));
+    return () => { sub?.data?.subscription?.unsubscribe?.(); };
+  }, [authEnabled]);
 
   // useCallback Hooks
   const calculateDashboardData = useCallback(() => {
@@ -367,6 +396,112 @@ const App: React.FC = () => {
     setTimeout(() => {
       setGlobalLoadingMessage(null);
     }, 500);
+  };
+
+  // Auth handlers
+  const handleLogin = async (email: string, password: string) => {
+    try {
+      setAuthLoading(true); setAuthError(null);
+      const user = await signInWithEmailPassword(email, password);
+      setAuthUser(user);
+      setUserProfile(prev => ({
+        ...(prev || { targetRole: '', dailyStudyHours: 3, studyDays: ['Segunda','Terça','Quarta','Quinta','Sexta'] }),
+        email: user.email || null,
+        uid: user.id,
+      }));
+      setAuthOpen(false);
+      // Load cloud state and merge
+      const cloud = await loadUserStateFromCloud(user.id);
+      if (cloud) {
+        // Simple strategy: prefer cloud if newer
+        const local = getCurrentAppState();
+        const useCloud = !local?.lastSaved || (cloud.lastSaved || 0) >= (local.lastSaved || 0);
+        if (useCloud) {
+          // Apply cloud state
+          await updateState(() => cloud);
+        } else {
+          // Push local to cloud
+          await saveUserStateToCloud(user.id, local);
+        }
+      } else {
+        // First time: push local state
+        await saveUserStateToCloud(user.id, getCurrentAppState());
+      }
+    } catch (err: any) {
+      setAuthError(err?.message || 'Falha no login');
+    } finally {
+      setAuthLoading(false);
+    }
+  };
+
+  const handleRegister = async (email: string, password: string) => {
+    try {
+      setAuthLoading(true); setAuthError(null);
+      const user = await signUpWithEmailPassword(email, password);
+      setAuthUser(user);
+      setUserProfile(prev => ({
+        ...(prev || { targetRole: '', dailyStudyHours: 3, studyDays: ['Segunda','Terça','Quarta','Quinta','Sexta'] }),
+        email: user.email || null,
+        uid: user.id,
+      }));
+      setAuthOpen(false);
+      // Initialize cloud with current local state
+      await saveUserStateToCloud(user.id, getCurrentAppState());
+    } catch (err: any) {
+      setAuthError(err?.message || 'Falha no registro');
+    } finally {
+      setAuthLoading(false);
+    }
+  };
+
+  const handleLogout = async () => {
+    try {
+      setAuthLoading(true);
+      await signOutUser();
+      setAuthUser(null);
+      setUserProfile(prev => prev ? { ...prev, email: null, uid: undefined } : prev);
+    } catch (e) {
+      // ignore
+    } finally {
+      setAuthLoading(false);
+    }
+  };
+
+  const handleGoogleLogin = async () => {
+    try {
+      setAuthLoading(true);
+      setAuthError(null);
+      await signInWithGoogle();
+      // Note: The actual user data will be handled by onAuthStateChange callback
+      setAuthOpen(false);
+    } catch (err: any) {
+      setAuthError(err?.message || 'Falha no login com Google');
+    } finally {
+      setAuthLoading(false);
+    }
+  };
+
+  const handleForgotPassword = async (email: string) => {
+    try {
+      setAuthLoading(true);
+      setAuthError(null);
+      await resetPassword(email);
+    } catch (err: any) {
+      setAuthError(err?.message || 'Erro ao enviar email de recuperação');
+      throw err; // Re-throw so the component can handle success state
+    } finally {
+      setAuthLoading(false);
+    }
+  };
+
+  const handleManualSync = async () => {
+    if (!authUser) return;
+    try {
+      const state = getCurrentAppState();
+      await saveUserStateToCloud(authUser.id, state);
+    } catch (e) {
+      console.error('Cloud sync failed', e);
+    }
   };
 
   // Handler para restaurar estado do gerenciador de dados
@@ -708,6 +843,27 @@ const App: React.FC = () => {
               >
                   <span className="hidden sm:inline">Questões</span>
               </Button>
+              {authEnabled && (authUser ? (
+                <>
+                  <Button
+                    variant="ghost" size="md"
+                    onClick={handleManualSync}
+                    leftIcon={<CircleStackIcon className="w-5 h-5" />}
+                    className="font-semibold rounded-xl px-4 py-2 text-slate-600 hover:text-emerald-700 hover:bg-emerald-50"
+                  >
+                    Sincronizar
+                  </Button>
+                  <div className="h-6 w-px bg-slate-300 mx-1"></div>
+                  <span className="text-sm text-slate-700 mr-2">{authUser.email || 'Conta'}</span>
+                  <Button variant="outline" size="md" onClick={handleLogout} className="rounded-xl">
+                    Sair
+                  </Button>
+                </>
+              ) : (
+                <Button variant="primary" size="md" onClick={() => setAuthOpen(true)} className="rounded-xl">
+                  Entrar
+                </Button>
+              ))}
             </nav>
           </div>
         </div>
@@ -728,6 +884,18 @@ const App: React.FC = () => {
           </div>
         </div>
       </main>
+
+      {authEnabled && (
+      <AuthModal
+        isOpen={authOpen}
+        onClose={() => setAuthOpen(false)}
+        onLogin={handleLogin}
+        onRegister={handleRegister}
+        onGoogleLogin={handleGoogleLogin}
+        onForgotPassword={handleForgotPassword}
+        isLoading={authLoading}
+        error={authError}
+      />)}
 
       {/* Modern Footer */}
       <footer className="relative bg-gradient-to-br from-slate-900 via-slate-800 to-indigo-900 text-slate-300 py-12">
