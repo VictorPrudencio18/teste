@@ -4,6 +4,7 @@ import React from 'react';
 import { DashboardData, AnalyzedSubject, AnalyzedTopic, EditalAnalysisData } from '../../types';
 import { Card } from '../common/Card';
 import { Button } from '../common/Button';
+import { AutoSaveStatus } from '../common/AutoSaveStatus';
 // FIX: Import ArrowRightIcon
 import { ChartPieIcon, SparklesIcon, ListBulletIcon, BookOpenIcon, AcademicCapIcon, ArrowRightIcon, CheckCircleIcon } from '../../constants';
 
@@ -13,6 +14,7 @@ interface DashboardStepProps {
   onNavigateToPlan: () => void;
   onNavigateToTopic: (subjectId: string, topicId: string) => void;
   analysisResult: EditalAnalysisData | null; // To find topics to continue studying
+  isAuthenticated?: boolean;
 }
 
 const ProgressBar: React.FC<{ percentage: number; colorClass?: string }> = ({ percentage, colorClass = "bg-sky-500" }) => (
@@ -28,7 +30,14 @@ const ProgressBar: React.FC<{ percentage: number; colorClass?: string }> = ({ pe
   </div>
 );
 
-export const DashboardStep: React.FC<DashboardStepProps> = ({ dashboardData, userName, onNavigateToPlan, onNavigateToTopic, analysisResult }) => {
+export const DashboardStep: React.FC<DashboardStepProps> = ({ 
+  dashboardData, 
+  userName, 
+  onNavigateToPlan, 
+  onNavigateToTopic, 
+  analysisResult,
+  isAuthenticated = false 
+}) => {
   const { 
     totalTopics, completedTopics, pendingTopics, studyingTopics, 
     completionPercentage, subjectProgress 
@@ -176,6 +185,11 @@ export const DashboardStep: React.FC<DashboardStepProps> = ({ dashboardData, use
         </Card>
       )}
 
+      {/* Auto Save Status */}
+      <AutoSaveStatus 
+        isAuthenticated={isAuthenticated} 
+        className="mt-8"
+      />
 
     </div>
   );

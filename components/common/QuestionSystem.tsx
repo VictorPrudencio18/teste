@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Question, QuizSession } from '../../types';
 import { questionService } from '../../services/questionService';
+import { useSupabaseQuestionTracking } from '../../hooks/useSupabaseQuestionTracking';
 import { Button } from '../common/Button';
 import { Card } from '../common/Card';
 import { 
@@ -23,6 +24,9 @@ interface QuestionSystemProps {
   category?: string;
   topicId?: string;
   title?: string;
+  userId?: string;
+  subjectName?: string;
+  topicName?: string;
 }
 
 export const QuestionSystem: React.FC<QuestionSystemProps> = ({
@@ -31,7 +35,10 @@ export const QuestionSystem: React.FC<QuestionSystemProps> = ({
   onBack,
   category,
   topicId,
-  title = "Sistema de Questões"
+  title = "Sistema de Questões",
+  userId,
+  subjectName,
+  topicName
 }) => {
   const [currentSession, setCurrentSession] = useState<QuizSession | null>(null);
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
@@ -40,6 +47,14 @@ export const QuestionSystem: React.FC<QuestionSystemProps> = ({
   const [questionStartTime, setQuestionStartTime] = useState(Date.now());
   const [showResults, setShowResults] = useState(false);
   const [userStats, setUserStats] = useState(questionService.getUserStats());
+
+  // Hook para sincronização com Supabase
+  const { saveQuestionAttempt, saveStudySession } = useSupabaseQuestionTracking({
+    userId,
+    topicId,
+    subjectName,
+    topicName
+  });
 
   useEffect(() => {
     if (questions.length > 0) {
@@ -61,13 +76,13 @@ export const QuestionSystem: React.FC<QuestionSystemProps> = ({
     setSelectedAnswer(answerIndex);
   };
 
-  const handleSubmitAnswer = () => {
+  const handleSubmitAnswer = async () => {
     if (!currentSession || !currentQuestion || selectedAnswer === null) return;
 
     const timeSpent = (Date.now() - questionStartTime) / 1000; // em segundos
     const isCorrect = selectedAnswer === currentQuestion.correctAnswerIndex;
 
-    // Registra a tentativa no serviço
+    // Registra a tentativa no serviço local
     questionService.recordAttempt(
       currentQuestion.id,
       selectedAnswer,
@@ -75,6 +90,20 @@ export const QuestionSystem: React.FC<QuestionSystemProps> = ({
       timeSpent,
       currentQuestion
     );
+
+    // Salva no Supabase (em background, não bloqueia UX)
+    saveQuestionAttempt(
+      currentQuestion,
+      selectedAnswer,
+      isCorrect,
+      Math.round(timeSpent),
+      0, // hints usados
+      topicId,
+      subjectName,
+      topicName
+    ).catch(error => {
+      console.warn('Falha ao salvar questão no Supabase:', error);
+    });
 
     // Atualiza a sessão atual
     const attempt = {
@@ -106,6 +135,22 @@ export const QuestionSystem: React.FC<QuestionSystemProps> = ({
     } else {
       // Finaliza sessão
       questionService.completeQuizSession(currentSession);
+      
+      // Salva sessão de estudo no Supabase
+      const durationMinutes = Math.round((Date.now() - currentSession.startTime) / 60000);
+      const performanceScore = Math.round((currentSession.correctAnswers / currentSession.questions.length) * 100);
+      
+      saveStudySession(
+        durationMinutes,
+        'questions',
+        performanceScore,
+        `Sessão de questões: ${currentSession.correctAnswers}/${currentSession.questions.length} corretas`,
+        subjectName,
+        topicName
+      ).catch(error => {
+        console.warn('Falha ao salvar sessão de estudo no Supabase:', error);
+      });
+      
       setShowResults(true);
       if (onComplete) {
         onComplete(currentSession);

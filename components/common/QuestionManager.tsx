@@ -23,11 +23,21 @@ import {
 
 interface QuestionManagerProps {
   onBack?: () => void;
+  userId?: string;
+  subjectName?: string;
+  topicName?: string;
+  topicId?: string;
 }
 
 type ViewMode = 'home' | 'generate' | 'quiz' | 'stats' | 'custom';
 
-export const QuestionManager: React.FC<QuestionManagerProps> = ({ onBack }) => {
+export const QuestionManager: React.FC<QuestionManagerProps> = ({ 
+  onBack, 
+  userId, 
+  subjectName, 
+  topicName,
+  topicId 
+}) => {
   const [viewMode, setViewMode] = useState<ViewMode>('home');
   const [loading, setLoading] = useState(false);
   const [currentQuestions, setCurrentQuestions] = useState<Question[]>([]);
@@ -136,7 +146,11 @@ export const QuestionManager: React.FC<QuestionManagerProps> = ({ onBack }) => {
         onComplete={handleQuizComplete}
         onBack={() => setViewMode('home')}
         category={category}
+        topicId={topicId}
         title="Sistema de Questões"
+        userId={userId}
+        subjectName={subjectName}
+        topicName={topicName}
       />
     );
   }

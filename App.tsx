@@ -18,6 +18,8 @@ import { QuestionSystemStep } from './components/steps/QuestionSystemStep';
 import { DataManagementStep } from './components/steps/DataManagementStep';
 import { LoadingSpinner } from './components/common/LoadingSpinner';
 import { Button } from './components/common/Button';
+import SyncStatus from './components/common/SyncStatus';
+import { NotificationSystem, useNotifications } from './components/common/NotificationSystem';
 import { analyzeEditalWithAI, generateTopicContentWithAI, extractRolesFromEditalAI, getAIStudySuggestions, askAICoachQuestion, getDeeperUnderstandingAI } from './services/geminiService';
 import { AcademicCapIcon, SparklesIcon, ChatBubbleLeftEllipsisIcon, HomeIcon, ChartPieIcon, QuestionMarkCircleIcon, CircleStackIcon } from './constants'; // Removed ArrowRightOnRectangleIcon
 import { v4 as uuidv4 } from 'uuid';
@@ -36,21 +38,25 @@ import {
 } from './services/authService';
 import { supabase } from './services/supabaseClient';
 import { saveUserStateToCloud, loadUserStateFromCloud } from './services/cloudSyncService';
+import { userDataService } from './services/userDataService';
 
 const LOCALSTORAGE_KEY = 'concursoGeniusAppState_v1';
 
 const App: React.FC = () => {
   // --- INITIALIZE NEW STORAGE SYSTEM ---
+  const [authUser, setAuthUser] = useState<AuthUser | null>(null);
+  
   const { 
     state: savedState, 
     loading: storageLoading, 
     saveState, 
     loadState,
-    updateState
-  } = useAppStorage();
-
-  // State Hooks - Initialize from new storage system
-  const [authUser, setAuthUser] = useState<AuthUser | null>(null);
+    updateState,
+    smartRecover,
+    emergencyRecover,
+    createManualBackup,
+    safeSyncToCloud
+  } = useAppStorage({}, { userId: authUser?.id });
   const [authLoading, setAuthLoading] = useState(false);
   const [authError, setAuthError] = useState<string | null>(null);
   const [authOpen, setAuthOpen] = useState(false);
@@ -94,6 +100,22 @@ const App: React.FC = () => {
     savedState?.aiCoachChatMessages || []
   );
   const [aiCoachSuggestions, setAiCoachSuggestions] = useState<AISuggestion[] | null>(null);
+  
+  // Sync status states
+  const [isSyncing, setIsSyncing] = useState(false);
+  const [lastSyncTime, setLastSyncTime] = useState<Date | null>(null);
+  const [syncError, setSyncError] = useState(false);
+  
+  // Notification system
+  const {
+    notifications,
+    dismissNotification,
+    notifyDataSaved,
+    notifyDataSyncError,
+    notifyOfflineMode,
+    notifyDataRecovered,
+    notifyBackupCreated
+  } = useNotifications();
   const [aiCoachGeneralAdvice, setAiCoachGeneralAdvice] = useState<string | null>(null);
   const [isLoadingAICoachSuggestions, setIsLoadingAICoachSuggestions] = useState(false);
   const [isLoadingAICoachChatResponse, setIsLoadingAICoachChatResponse] = useState(false);
@@ -191,8 +213,42 @@ const App: React.FC = () => {
     setEditalText(text); 
     setEditalFileName(fileName);
     setCurrentPhase(AppPhase.ROLE_SELECTION);
+    
+    // Salvamento crítico imediato - o edital é muito importante para perder
+    console.log('Critical save: PDF uploaded');
+    try {
+      const criticalState = {
+        ...getCurrentAppState(),
+        editalText: text,
+        editalFileName: fileName,
+        currentPhase: AppPhase.ROLE_SELECTION,
+        lastSaved: Date.now()
+      };
+      
+      // Salvar localmente primeiro (rápido)
+      await saveState(criticalState);
+      notifyDataSaved('Edital');
+      
+      // Criar backup manual para segurança extra
+      if (authUser) {
+        await createManualBackup('edital_uploaded');
+        notifyBackupCreated('do edital');
+        // Sincronizar com nuvem em background
+        safeSyncToCloud().catch(err => {
+          console.warn('Background cloud sync failed:', err);
+          notifyDataSyncError(() => handleManualSync());
+        });
+      } else {
+        notifyOfflineMode();
+      }
+    } catch (error) {
+      console.error('Critical save failed:', error);
+      notifyDataSyncError(() => handleManualSync());
+      // Mesmo em caso de erro, tentar continuar
+    }
+    
     await fetchRoles(text);
-  }, [fetchRoles]);
+  }, [fetchRoles, getCurrentAppState, saveState, createManualBackup, safeSyncToCloud, authUser]);
   
   const updateTopicData = useCallback((topicId: string, updateFn: (topic: AnalyzedTopic) => AnalyzedTopic) => {
     setAnalysisResult(prevResult => {
@@ -261,7 +317,32 @@ const App: React.FC = () => {
 
   const handleUpdateTopicStatus = useCallback((topicId: string, status: AnalyzedTopic['status']) => {
     updateTopicData(topicId, t => ({ ...t, status }));
-  }, [updateTopicData]);
+    
+    // Salvar no Supabase (em background)
+    if (authUser && analysisResult) {
+      const subject = analysisResult.subjects.find(s => s.topics.some(topic => topic.id === topicId));
+      const topic = subject?.topics.find(t => t.id === topicId);
+      
+      if (subject && topic) {
+        userDataService.getUserLatestEdital(authUser.id)
+          .then(edital => {
+            if (edital?.id) {
+              return userDataService.saveTopicProgress(
+                authUser.id,
+                edital.id,
+                { ...topic, status },
+                subject.name,
+                topic.userInteractions || {},
+                0 // tempo de estudo será atualizado separadamente
+              );
+            }
+          })
+          .catch(error => {
+            console.warn('Falha ao salvar status do tópico no Supabase:', error);
+          });
+      }
+    }
+  }, [updateTopicData, authUser, analysisResult]);
 
   const handleUpdateQuestionInteraction = useCallback((
     topicId: string, 
@@ -284,9 +365,35 @@ const App: React.FC = () => {
         isCorrect: isRevealed && isCorrect !== undefined ? isCorrect : existingInteraction.isCorrect,
         attempts: newAttempts !== undefined ? newAttempts : existingInteraction.attempts
       };
+      
+      // Salvar no Supabase (em background)
+      if (authUser && analysisResult) {
+        const subject = analysisResult.subjects.find(s => s.topics.some(topic => topic.id === topicId));
+        const topic = subject?.topics.find(t => t.id === topicId);
+        
+        if (subject && topic) {
+          userDataService.getUserLatestEdital(authUser.id)
+            .then(edital => {
+              if (edital?.id) {
+                return userDataService.saveTopicProgress(
+                  authUser.id,
+                  edital.id,
+                  topic,
+                  subject.name,
+                  { ...t.userInteractions, questions: interactions.questions },
+                  0 // tempo de estudo será atualizado separadamente
+                );
+              }
+            })
+            .catch(error => {
+              console.warn('Falha ao salvar interação de questão no Supabase:', error);
+            });
+        }
+      }
+      
       return { ...t, userInteractions: interactions };
     });
-  }, [updateTopicData]);
+  }, [updateTopicData, authUser, analysisResult]);
 
   const handleFlashcardSelfAssessment = useCallback((topicId: string, flashcardId: string, assessment: FlashcardSelfAssessment) => {
     updateTopicData(topicId, t => {
@@ -298,9 +405,35 @@ const App: React.FC = () => {
             reviewCount: (interactions.flashcards[flashcardId]?.reviewCount || 0) + 1,
             lastReviewedTimestamp: Date.now()
         };
+        
+        // Salvar no Supabase (em background)
+        if (authUser && analysisResult) {
+          const subject = analysisResult.subjects.find(s => s.topics.some(topic => topic.id === topicId));
+          const topic = subject?.topics.find(topic => topic.id === topicId);
+          
+          if (subject && topic) {
+            userDataService.getUserLatestEdital(authUser.id)
+              .then(edital => {
+                if (edital?.id) {
+                  return userDataService.saveTopicProgress(
+                    authUser.id,
+                    edital.id,
+                    topic,
+                    subject.name,
+                    { ...t.userInteractions, flashcards: interactions.flashcards },
+                    0 // tempo de estudo será atualizado separadamente
+                  );
+                }
+              })
+              .catch(error => {
+                console.warn('Falha ao salvar autoavaliação de flashcard no Supabase:', error);
+              });
+          }
+        }
+        
         return { ...t, userInteractions: interactions };
     });
-  }, [updateTopicData]);
+  }, [updateTopicData, authUser, analysisResult]);
 
   const handleGetDeeperUnderstanding = useCallback(async (topicId: string) => {
     const subject = analysisResult?.subjects.find(s => s.topics.some(t => t.id === topicId));
@@ -367,8 +500,19 @@ const App: React.FC = () => {
     const finalMessages = [...updatedMessages, aiResponseMessage];
     setAiCoachChatMessages(finalMessages);
     
+    // Salvar conversa no Supabase (em background)
+    if (authUser && finalMessages.length > 0) {
+      userDataService.saveAICoachConversation(
+        authUser.id,
+        finalMessages,
+        currentStudyingTopicId || undefined
+      ).catch(error => {
+        console.warn('Falha ao salvar conversa do AI Coach no Supabase:', error);
+      });
+    }
+    
     setIsLoadingAICoachChatResponse(false);
-  }, [aiCoachChatMessages, editalText, userProfile, analysisResult]);
+  }, [aiCoachChatMessages, editalText, userProfile, analysisResult, authUser, currentStudyingTopicId]);
   
   const resetLocalAppState = () => {
     setEditalText(''); setEditalFileName(null); 
@@ -410,23 +554,34 @@ const App: React.FC = () => {
         uid: user.id,
       }));
       setAuthOpen(false);
-      // Load cloud state and merge
-      const cloud = await loadUserStateFromCloud(user.id);
-      if (cloud) {
-        // Simple strategy: prefer cloud if newer
-        const local = getCurrentAppState();
-        const useCloud = !local?.lastSaved || (cloud.lastSaved || 0) >= (local.lastSaved || 0);
-        if (useCloud) {
-          // Apply cloud state
-          await updateState(() => cloud);
+      
+      // Usar recuperação inteligente
+      console.log('Attempting smart recovery after login...');
+      try {
+        const recoveredState = await smartRecover();
+        if (recoveredState) {
+          console.log('Smart recovery successful');
+          notifyDataRecovered();
+          // O estado já foi atualizado pelo smartRecover
         } else {
-          // Push local to cloud
-          await saveUserStateToCloud(user.id, local);
+          // Fallback: tentar sincronização manual
+          console.log('Smart recovery failed, trying manual sync...');
+          const cloud = await loadUserStateFromCloud(user.id);
+          if (cloud) {
+            await updateState(() => cloud);
+            notifyDataRecovered();
+          } else {
+            // Primeira vez: enviar estado local para nuvem
+            await safeSyncToCloud();
+          }
         }
-      } else {
-        // First time: push local state
-        await saveUserStateToCloud(user.id, getCurrentAppState());
+      } catch (error) {
+        console.error('Recovery failed, using local state:', error);
+        notifyDataSyncError(() => handleManualSync());
+        // Em caso de erro, criar backup manual do estado atual
+        await createManualBackup('login_fallback');
       }
+      
     } catch (err: any) {
       setAuthError(err?.message || 'Falha no login');
     } finally {
@@ -496,11 +651,40 @@ const App: React.FC = () => {
 
   const handleManualSync = async () => {
     if (!authUser) return;
+    setIsSyncing(true);
+    setSyncError(false);
+    
     try {
       const state = getCurrentAppState();
       await saveUserStateToCloud(authUser.id, state);
+      setLastSyncTime(new Date());
+      console.log('Manual sync successful');
     } catch (e) {
-      console.error('Cloud sync failed', e);
+      console.error('Manual sync failed', e);
+      setSyncError(true);
+    } finally {
+      setIsSyncing(false);
+    }
+  };
+
+  const handleEmergencyRecover = async () => {
+    if (!authUser) return;
+    setIsSyncing(true);
+    
+    try {
+      const recovered = await emergencyRecover();
+      if (recovered) {
+        setLastSyncTime(new Date());
+        setSyncError(false);
+        console.log('Emergency recovery successful');
+      } else {
+        console.warn('No backup data found for recovery');
+      }
+    } catch (e) {
+      console.error('Emergency recovery failed', e);
+      setSyncError(true);
+    } finally {
+      setIsSyncing(false);
     }
   };
 
@@ -566,6 +750,55 @@ const App: React.FC = () => {
       setAnalysisResult(resultWithInitializedFields);
       setCurrentPhase(AppPhase.DASHBOARD); 
       setGlobalLoadingMessage(null);
+
+      // Salvamento crítico após análise concluída
+      console.log('Critical save: Analysis completed');
+      try {
+        const criticalState = {
+          ...getCurrentAppState(),
+          analysisResult: resultWithInitializedFields,
+          userProfile: completeProfile,
+          currentPhase: AppPhase.DASHBOARD,
+          lastSaved: Date.now()
+        };
+        
+        await saveState(criticalState);
+        notifyDataSaved('Plano de estudos');
+        
+        if (authUser) {
+          // Salvar dados completos no Supabase
+          try {
+            console.log('Salvando dados completos no Supabase...');
+            await userDataService.saveCompleteUserData(
+              authUser.id,
+              editalText,
+              editalFileName || 'edital.pdf',
+              resultWithInitializedFields,
+              completeProfile.targetRole,
+              completeProfile
+            );
+            console.log('✅ Todos os dados salvos no Supabase com sucesso!');
+            notifyDataSaved('📊 Edital, plano e progresso completos salvos no perfil');
+          } catch (supabaseError) {
+            console.error('Erro ao salvar no Supabase:', supabaseError);
+            // Não bloquear o fluxo principal se o Supabase falhar
+            notifyDataSaved('Plano de estudos (salvo localmente)');
+          }
+          
+          await createManualBackup('analysis_completed');
+          notifyBackupCreated('do plano');
+          safeSyncToCloud().catch(err => {
+            console.warn('Background cloud sync failed after analysis:', err);
+            notifyDataSyncError(() => handleManualSync());
+          });
+        } else {
+          console.log('⚠️  Usuário não logado - dados salvos apenas localmente');
+          notifyOfflineMode();
+        }
+      } catch (error) {
+        console.error('Critical save after analysis failed:', error);
+        notifyDataSyncError(() => handleManualSync());
+      }
 
     } catch (error) {
       console.error("Error during preferences submission or plan generation:", error);
@@ -649,7 +882,14 @@ const App: React.FC = () => {
       case AppPhase.GENERATING_PLAN: return null; 
       case AppPhase.DASHBOARD:
         return dashboardData ? (
-          <DashboardStep dashboardData={dashboardData} userName={userProfile?.email?.split('@')[0]} onNavigateToPlan={handleNavigateToPlanView} onNavigateToTopic={handleSelectTopic} analysisResult={analysisResult}/>
+          <DashboardStep 
+            dashboardData={dashboardData} 
+            userName={userProfile?.email?.split('@')[0]} 
+            onNavigateToPlan={handleNavigateToPlanView} 
+            onNavigateToTopic={handleSelectTopic} 
+            analysisResult={analysisResult}
+            isAuthenticated={!!authUser}
+          />
         ) : (analysisResult && analysisResult.subjects.length === 0 && !analysisResult.error) ? 
            <PlanViewStep planData={analysisResult} targetRoleName={userProfile?.targetRole} onSelectTopic={handleSelectTopic} onGoBack={() => setCurrentPhase(AppPhase.USER_PREFERENCES)} />
            : <div className="flex flex-col items-center justify-center min-h-[calc(100vh-200px)]"><LoadingSpinner size="lg" /><p className="mt-4 text-slate-600">Carregando Dashboard...</p></div>;
@@ -972,6 +1212,24 @@ const App: React.FC = () => {
           </div>
         </div>
       </footer>
+      
+      {/* Notification System */}
+      <NotificationSystem
+        notifications={notifications}
+        onDismiss={dismissNotification}
+      />
+      
+      {/* Sync Status Component */}
+      {authUser && (
+        <SyncStatus
+          isOnline={navigator.onLine && !!supabase}
+          lastSyncTime={lastSyncTime}
+          isSyncing={isSyncing}
+          hasError={syncError}
+          onManualSync={handleManualSync}
+          onEmergencyRecover={handleEmergencyRecover}
+        />
+      )}
     </div>
   );
 };

@@ -1,11 +1,13 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { localStorageService, AppState } from '../services/localStorageService';
+import BackupRecoveryService from '../services/backupRecoveryService';
 
 export interface UseAppStorageOptions {
   autoSave?: boolean;
   autoSaveInterval?: number;
   onSaveError?: (error: Error) => void;
   onLoadError?: (error: Error) => void;
+  userId?: string; // Para sincronização na nuvem
 }
 
 export interface UseAppStorageReturn {
@@ -17,6 +19,12 @@ export interface UseAppStorageReturn {
   saveState: (state: AppState) => Promise<boolean>;
   loadState: () => Promise<AppState | null>;
   updateState: (updater: (prev: AppState | null) => AppState) => Promise<boolean>;
+  
+  // Funções de recuperação robusta
+  smartRecover: () => Promise<AppState | null>;
+  emergencyRecover: () => Promise<AppState | null>;
+  createManualBackup: (label?: string) => Promise<boolean>;
+  safeSyncToCloud: () => Promise<boolean>;
   
   // Gerenciamento de backups
   createBackup: (suffix?: string) => Promise<boolean>;
@@ -43,7 +51,8 @@ export const useAppStorage = (
     autoSave = true,
     autoSaveInterval = 30000,
     onSaveError,
-    onLoadError
+    onLoadError,
+    userId
   } = options;
 
   const [state, setState] = useState<AppState | null>(null);
@@ -268,6 +277,55 @@ export const useAppStorage = (
     disableAutoSaveInternal();
   }, [disableAutoSaveInternal]);
 
+  // Funções de recuperação robusta
+  const smartRecover = useCallback(async (): Promise<AppState | null> => {
+    if (!userId) return null;
+    try {
+      const recovered = await BackupRecoveryService.smartRecover(userId);
+      if (recovered) {
+        setState(recovered);
+        return recovered;
+      }
+    } catch (error) {
+      console.error('Smart recover failed:', error);
+    }
+    return null;
+  }, [userId]);
+
+  const emergencyRecover = useCallback(async (): Promise<AppState | null> => {
+    if (!userId) return null;
+    try {
+      const recovered = await BackupRecoveryService.emergencyRecover(userId);
+      if (recovered) {
+        setState(recovered);
+        return recovered;
+      }
+    } catch (error) {
+      console.error('Emergency recover failed:', error);
+    }
+    return null;
+  }, [userId]);
+
+  const createManualBackup = useCallback(async (label?: string): Promise<boolean> => {
+    if (!userId || !state) return false;
+    try {
+      return await BackupRecoveryService.createManualBackup(userId, state, label);
+    } catch (error) {
+      console.error('Manual backup failed:', error);
+      return false;
+    }
+  }, [userId, state]);
+
+  const safeSyncToCloud = useCallback(async (): Promise<boolean> => {
+    if (!userId || !state) return false;
+    try {
+      return await BackupRecoveryService.safeSyncToCloud(userId, state);
+    } catch (error) {
+      console.error('Safe sync to cloud failed:', error);
+      return false;
+    }
+  }, [userId, state]);
+
   return {
     state,
     loading,
@@ -276,6 +334,12 @@ export const useAppStorage = (
     saveState,
     loadState,
     updateState,
+    
+    // Funções de recuperação robusta
+    smartRecover,
+    emergencyRecover,
+    createManualBackup,
+    safeSyncToCloud,
     
     createBackup,
     listBackups,
