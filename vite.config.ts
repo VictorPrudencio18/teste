@@ -4,9 +4,10 @@ import react from '@vitejs/plugin-react';
 
 export default defineConfig(({ mode }) => {
     const env = loadEnv(mode, '.', '');
+    const baseFromEnv = env.BASE_URL || env.VITE_BASE || '/';
     return {
-        // Use root base for Vercel to avoid broken asset paths
-        base: '/',
+      // Base path is configurable to support both Vercel ('/') and GitHub Pages ('/repo/')
+      base: baseFromEnv,
       server: {
         port: 3000,
         host: '0.0.0.0',
