@@ -4,32 +4,31 @@ import { GEMINI_TEXT_MODEL } from '../constants';
 import { EditalAnalysisData, AnalyzedSubject, Question, Flashcard, TopicContent, ContentType, DiscursiveQuestion, AISuggestion, ChatMessage, FlashcardSelfAssessment, AnalyzedTopic, UserInteractions, DeeperUnderstandingContent } from '../types';
 import { v4 as uuidv4 } from 'uuid';
 
-const API_KEY = process.env.API_KEY || import.meta.env.VITE_API_KEY;
+const API_KEY = process.env.API_KEY;
 
 const getAi = () => {
   if (!API_KEY) {
     console.warn("API_KEY não configurada. Usando dados mockados para Gemini API.");
-    console.warn("Variáveis disponíveis:", { 
-      processEnvApiKey: process.env.API_KEY, 
-      viteApiKey: import.meta.env.VITE_API_KEY 
-    });
     return null;
   }
-  console.log("✅ Gemini AI configurado com sucesso!");
   return new GoogleGenAI({ apiKey: API_KEY });
 };
 
 const parseGeminiJsonResponse = <T,>(textResponse: string): T | { error: string } => {
   let jsonStr = textResponse.trim();
-  const fenceRegex = /^```(\w*)?\s*\n?(.*?)\n?\s*```$/s;
+  // Regex to find the first JSON code block, ignoring what comes before or after.
+  // Matches ```json or just ``` followed by content and ending with ```
+  const fenceRegex = /```(?:json)?\s*([\s\S]*?)\s*```/i;
   const match = jsonStr.match(fenceRegex);
-  if (match && match[2]) {
-    jsonStr = match[2].trim();
+  
+  if (match && match[1]) {
+    jsonStr = match[1].trim();
   }
+
   try {
     return JSON.parse(jsonStr) as T;
   } catch (e) {
-    console.error("Falha ao parsear JSON da resposta Gemini:", e, "String original:", jsonStr);
+    console.error("Falha ao parsear JSON da resposta Gemini:", e, "String original:", textResponse);
     return { error: `Falha ao parsear JSON: ${ (e as Error).message }` };
   }
 };
@@ -716,27 +715,5 @@ export const getDeeperUnderstandingAI = async (
   } catch (error) {
     console.error(`Erro ao gerar ajuda adicional para ${topicName}:`, error);
     return { error: `Erro na API Gemini ao gerar ajuda adicional: ${ (error as Error).message }` };
-  }
-};
-
-// Função genérica para gerar conteúdo com Gemini
-export const generateContent = async (prompt: string): Promise<string> => {
-  const ai = getAi();
-  if (!ai) {
-    throw new Error('API_KEY não configurada para Gemini AI');
-  }
-
-  try {
-    const response: GenerateContentResponse = await ai.models.generateContent({
-      model: GEMINI_TEXT_MODEL,
-      contents: [
-        { parts: [{ text: prompt }] }
-      ],
-    });
-
-    return response.text || 'Resposta não disponível';
-  } catch (error) {
-    console.error('Erro ao gerar conteúdo com Gemini:', error);
-    throw error;
   }
 };

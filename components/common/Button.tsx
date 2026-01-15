@@ -1,3 +1,4 @@
+
 import React from 'react';
 import { LoadingSpinner } from './LoadingSpinner';
 
@@ -22,28 +23,25 @@ export const Button: React.FC<ButtonProps> = ({
   fullWidth = false,
   ...props
 }) => {
-  const baseStyles = "font-semibold rounded-lg focus:outline-none focus:ring-2 focus:ring-offset-2 transition-all ease-in-out duration-200 flex items-center justify-center shadow-sm hover:shadow-md";
+  const baseStyles = "font-semibold rounded-xl focus:outline-none focus:ring-2 focus:ring-offset-2 transition-all duration-200 flex items-center justify-center active:scale-95 disabled:active:scale-100";
   
   const variantStyles = {
-    primary: "bg-gradient-to-r from-sky-600 to-cyan-500 hover:from-sky-700 hover:to-cyan-600 text-white focus:ring-sky-500",
-    secondary: "bg-slate-200 hover:bg-slate-300 text-slate-700 focus:ring-slate-400",
-    danger: "bg-red-600 hover:bg-red-700 text-white focus:ring-red-500",
-    ghost: "bg-transparent hover:bg-sky-100 text-sky-700 focus:ring-sky-500 shadow-none hover:shadow-none",
-    outline: "bg-transparent border-2 border-sky-600 text-sky-700 hover:bg-sky-50 focus:ring-sky-500 shadow-none hover:shadow-sm",
-    link: "bg-transparent text-sky-600 hover:text-sky-700 hover:underline focus:ring-sky-500 shadow-none hover:shadow-none p-0", // Added link variant
+    primary: "bg-gradient-to-br from-sky-600 to-cyan-600 hover:from-sky-700 hover:to-cyan-700 text-white shadow-md hover:shadow-lg focus:ring-sky-500 border border-transparent",
+    secondary: "bg-slate-100 hover:bg-slate-200 text-slate-700 focus:ring-slate-400 border border-slate-200",
+    danger: "bg-red-50 hover:bg-red-100 text-red-600 border border-red-200 focus:ring-red-500 hover:border-red-300",
+    ghost: "bg-transparent hover:bg-slate-100 text-slate-600 hover:text-sky-700 focus:ring-sky-500",
+    outline: "bg-white border-2 border-sky-100 text-sky-700 hover:border-sky-500 hover:bg-sky-50 focus:ring-sky-500",
+    link: "bg-transparent text-sky-600 hover:text-sky-800 underline-offset-4 hover:underline focus:ring-sky-500 p-0 shadow-none active:scale-100", 
   };
 
   const sizeStyles = {
-    sm: "px-3.5 py-2 text-xs", 
-    md: "px-5 py-2.5 text-sm", 
-    lg: "px-7 py-3 text-base", 
+    sm: "px-3 py-1.5 text-xs sm:text-sm", 
+    md: "px-5 py-2.5 text-sm sm:text-base", 
+    lg: "px-6 py-3.5 text-base sm:text-lg", 
   };
 
-  // Adjust padding for link variant if needed, or rely on its intrinsic padding (p-0 for now)
   const currentSizeStyles = variant === 'link' ? (size === 'sm' ? 'text-xs' : size === 'md' ? 'text-sm' : 'text-base') : sizeStyles[size];
-
-
-  const disabledStyles = "opacity-60 cursor-not-allowed shadow-none hover:shadow-none";
+  const disabledStyles = "opacity-50 cursor-not-allowed shadow-none hover:shadow-none grayscale";
   const widthStyles = fullWidth ? "w-full" : "";
 
   return (
@@ -53,12 +51,12 @@ export const Button: React.FC<ButtonProps> = ({
       {...props}
     >
       {isLoading ? (
-        <LoadingSpinner size="sm" color={variant === 'primary' || variant === 'danger' ? 'text-white' : 'text-sky-600'} />
+        <LoadingSpinner size="sm" color={variant === 'primary' ? 'text-white' : 'text-sky-600'} />
       ) : (
         <>
-          {leftIcon && <span className={`mr-2 ${size === 'sm' ? 'w-3.5 h-3.5' : 'w-4 h-4'}`}>{leftIcon}</span>}
-          <span className={variant === 'link' ? '' : "mx-1"}>{children}</span>
-          {rightIcon && <span className={`ml-2 ${size === 'sm' ? 'w-3.5 h-3.5' : 'w-4 h-4'}`}>{rightIcon}</span>}
+          {leftIcon && <span className={`mr-2 flex-shrink-0 ${size === 'sm' ? 'w-4 h-4' : 'w-5 h-5'}`}>{leftIcon}</span>}
+          <span className={variant === 'link' ? '' : "mx-0.5 truncate"}>{children}</span>
+          {rightIcon && <span className={`ml-2 flex-shrink-0 ${size === 'sm' ? 'w-4 h-4' : 'w-5 h-5'}`}>{rightIcon}</span>}
         </>
       )}
     </button>

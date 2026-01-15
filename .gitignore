@@ -7,13 +7,6 @@ yarn-error.log*
 pnpm-debug.log*
 lerna-debug.log*
 
-# Variáveis de ambiente (API Keys)
-.env
-.env.local
-.env.development.local
-.env.test.local
-.env.production.local
-
 node_modules
 dist
 dist-ssr
@@ -29,4 +22,3 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
-.vercel

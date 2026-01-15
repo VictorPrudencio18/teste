@@ -1,3 +1,4 @@
+
 import React from 'react';
 
 interface CardProps extends React.HTMLAttributes<HTMLDivElement> {
@@ -12,22 +13,24 @@ export const Card: React.FC<CardProps> = ({
   children, 
   className = '', 
   title, 
-  titleClassName = "text-2xl font-semibold text-slate-800", 
+  titleClassName = "text-xl sm:text-2xl font-bold text-slate-800", 
   actions,
   ...rest 
 }) => {
   return (
     <div 
-      className={`bg-white shadow-lg hover:shadow-xl transition-shadow duration-300 rounded-xl p-6 sm:p-8 ${className}`} 
+      className={`bg-white rounded-2xl shadow-sm border border-slate-100 p-5 sm:p-8 transition-all duration-300 hover:shadow-md ${className}`} 
       {...rest}
     >
       {(title || actions) && (
-        <div className="flex justify-between items-center mb-6 pb-4 border-b border-slate-200">
-          {title && <h3 className={`${titleClassName} font-display`}>{title}</h3>}
-          {actions && <div className="flex space-x-3">{actions}</div>}
+        <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center mb-6 pb-4 border-b border-slate-100 gap-4 sm:gap-0">
+          {title && <h3 className={`${titleClassName} font-display leading-tight`}>{title}</h3>}
+          {actions && <div className="flex space-x-3 self-end sm:self-auto">{actions}</div>}
         </div>
       )}
-      {children}
+      <div className="fade-in">
+        {children}
+      </div>
     </div>
   );
 };
